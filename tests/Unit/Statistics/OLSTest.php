@@ -2,6 +2,7 @@
 
 use Academe\PhpFinance\Statistics\OLS;
 use Academe\PhpFinance\Statistics\RollingOLS;
+use MathPHP\Exception\MatrixException;
 
 beforeEach(function () {
     $this->y = [2.5, 5.0, 7.5, 10.0, 12.5];
@@ -13,7 +14,15 @@ beforeEach(function () {
         [2, 4],
         [3, 6],
         [4, 8],
-        [5, 10]
+        [5, 10],
+    ];
+
+    $this->XMultiNonLinearlyDependent = [
+        [1, 10],
+        [2, 15],
+        [3, 12],
+        [4, 18],
+        [5, 14],
     ];
 });
 
@@ -23,8 +32,9 @@ test('can create OLS instance with single predictor', function () {
     expect($ols)->toBeInstanceOf(OLS::class);
 });
 
+// Fails if x2 is linearly dependent on x1 as that makes X'X singular (non-invertible)
 test('can create OLS instance with multiple predictors', function () {
-    $ols = new OLS($this->yMulti, $this->XMulti);
+    $ols = new OLS($this->yMulti, $this->XMultiNonLinearlyDependent);
     
     expect($ols)->toBeInstanceOf(OLS::class);
 });
@@ -139,7 +149,7 @@ test('throws exception for wrong prediction dimensions', function () {
     $ols = new OLS($this->yMulti, $this->XMulti);
     
     $ols->predict([[1]]);
-})->throws(InvalidArgumentException::class);
+})->throws(MatrixException::class);
 
 test('returns comprehensive summary', function () {
     $ols = new OLS($this->y, $this->X);

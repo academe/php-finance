@@ -7,7 +7,7 @@ namespace Academe\PhpFinance\Statistics;
 use InvalidArgumentException;
 use MathPHP\LinearAlgebra\Matrix;
 use MathPHP\LinearAlgebra\MatrixFactory;
-use MathPHP\Statistics\Distribution\Continuous\StudentT;
+use MathPHP\Probability\Distribution\Continuous\StudentT;
 use MathPHP\Statistics\Distribution\Continuous\F;
 
 class OLS
@@ -112,7 +112,7 @@ class OLS
         $Xty = $XMatrix->transpose()->multiply($yVector);
         
         $betaMatrix = $XtXInverse->multiply($Xty);
-        $this->coefficients = $betaMatrix->getColumnVector(0);
+        $this->coefficients = $betaMatrix->getColumn(0);
         
         $this->calculateFittedValues();
         $this->calculateResiduals();

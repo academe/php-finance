@@ -10,6 +10,21 @@ use MathPHP\LinearAlgebra\MatrixFactory;
 use MathPHP\Probability\Distribution\Continuous\StudentT;
 use MathPHP\Statistics\Distribution\Continuous\F;
 
+/**
+ * Ordinary Least Squares (OLS) regression implementation.
+ * 
+ * This class performs linear regression using the ordinary least squares method,
+ * which minimizes the sum of squared residuals between observed and predicted values.
+ * It supports both simple (single predictor) and multiple regression, with or without
+ * an intercept term.
+ * 
+ * The class calculates:
+ * - Regression coefficients (beta estimates)
+ * - Fitted values and residuals
+ * - R-squared and adjusted R-squared
+ * - Standard errors, t-statistics, and p-values for coefficients
+ * - F-test for overall model significance
+ */
 class OLS
 {
     private array $y;
@@ -25,6 +40,15 @@ class OLS
     private int $n;
     private int $k;
     
+    /**
+     * Constructs an OLS regression model.
+     * 
+     * @param array $y Dependent variable (response) values
+     * @param array $X Independent variables (predictors). Can be 1D array for simple regression
+     *                 or 2D array for multiple regression
+     * @param bool $hasIntercept Whether to include an intercept term (default: true)
+     * @throws InvalidArgumentException if inputs are invalid or insufficient observations
+     */
     public function __construct(
         array $y, 
         array $X, 
@@ -50,6 +74,17 @@ class OLS
         $this->fit();
     }
     
+    /**
+     * Validates input data for regression.
+     * 
+     * Ensures:
+     * - Arrays are non-empty
+     * - X and y have same number of observations
+     * - X rows have consistent dimensions
+     * - X contains numeric data
+     * 
+     * @throws InvalidArgumentException if validation fails
+     */
     private function validateInput(array $y, array $X): void
     {
         if (empty($y) || empty($X)) {
@@ -71,7 +106,12 @@ class OLS
             }
         }
     }
-    
+
+    /**
+     * Ensures input data X is formatted as a consistent 2D array.
+     * Converts 1D arrays (single predictor) into 2D arrays by wrapping each value.
+     * Reindexes array values to ensure sequential numeric keys.
+     */
     private function normalizeX(array $X): array
     {
         $normalized = [];
@@ -87,6 +127,11 @@ class OLS
         return $normalized;
     }
     
+    /**
+     * Adds an intercept column (column of 1s) as the first column of the X matrix.
+     * This allows the OLS model to estimate a y-intercept (bias term).
+     * Handles both 1D and 2D input arrays.
+     */
     private function addIntercept(array $X): array
     {
         $withIntercept = [];
@@ -102,11 +147,21 @@ class OLS
         return $withIntercept;
     }
     
+    /**
+     * Fits the OLS model using matrix algebra.
+     * 
+     * Calculates coefficients using the normal equation:
+     * β = (X'X)^(-1) X'y
+     * 
+     * Then computes all model statistics including fitted values,
+     * residuals, R-squared, standard errors, and significance tests.
+     */
     private function fit(): void
     {
         $XMatrix = MatrixFactory::create($this->X);
         $yVector = MatrixFactory::createFromColumnVector($this->y);
-        
+
+        /** @var \MathPHP\LinearAlgebra\NumericMatrix $XtX */
         $XtX = $XMatrix->transpose()->multiply($XMatrix);
         $XtXInverse = $XtX->inverse();
         $Xty = $XMatrix->transpose()->multiply($yVector);
@@ -122,6 +177,12 @@ class OLS
         $this->calculatePValues();
     }
     
+    /**
+     * Calculates predicted y values for each observation.
+     * 
+     * Fitted values are computed as: ŷ = Xβ
+     * where β are the estimated coefficients.
+     */
     private function calculateFittedValues(): void
     {
         $this->fittedValues = [];
@@ -135,6 +196,12 @@ class OLS
         }
     }
     
+    /**
+     * Calculates residuals (errors) for each observation.
+     * 
+     * Residuals are the differences between observed and fitted values:
+     * e = y - ŷ
+     */
     private function calculateResiduals(): void
     {
         $this->residuals = [];
@@ -144,6 +211,15 @@ class OLS
         }
     }
     
+    /**
+     * Calculates R-squared and adjusted R-squared.
+     * 
+     * R-squared measures the proportion of variance explained by the model:
+     * R² = 1 - (SS_res / SS_tot)
+     * 
+     * Adjusted R-squared accounts for the number of predictors:
+     * R²_adj = 1 - [(1 - R²) * (n - 1) / (n - k)]
+     */
     private function calculateRSquared(): void
     {
         $yMean = array_sum($this->y) / $this->n;
@@ -161,6 +237,15 @@ class OLS
         $this->adjustedRSquared = 1 - ((1 - $this->rSquared) * ($this->n - 1) / ($this->n - $this->k));
     }
     
+    /**
+     * Calculates standard errors for coefficient estimates.
+     * 
+     * Standard errors are derived from the diagonal of the covariance matrix:
+     * SE(β) = sqrt(diag(σ² * (X'X)^(-1)))
+     * where σ² is the residual variance.
+     * 
+     * @param Matrix|\MathPHP\LinearAlgebra\NumericMatrix $XtXInverse The inverse of X'X matrix
+     */
     private function calculateStandardErrors(Matrix $XtXInverse): void
     {
         $ssRes = array_sum(array_map(fn($r) => pow($r, 2), $this->residuals));
@@ -174,6 +259,14 @@ class OLS
         }
     }
     
+    /**
+     * Calculates t-statistics for hypothesis testing.
+     * 
+     * Tests the null hypothesis that each coefficient equals zero:
+     * t = β / SE(β)
+     * 
+     * Used to determine statistical significance of predictors.
+     */
     private function calculateTStatistics(): void
     {
         $this->tStatistics = [];
@@ -187,6 +280,12 @@ class OLS
         }
     }
     
+    /**
+     * Calculates p-values for coefficient significance tests.
+     * 
+     * P-values are computed from t-statistics using the Student's t-distribution
+     * with (n - k) degrees of freedom. Two-tailed test is used.
+     */
     private function calculatePValues(): void
     {
         $this->pValues = [];
@@ -198,46 +297,85 @@ class OLS
         }
     }
     
+    /**
+     * Returns the estimated regression coefficients.
+     * @return array Coefficient estimates (β values)
+     */
     public function getCoefficients(): array
     {
         return $this->coefficients;
     }
     
+    /**
+     * Returns the residuals (prediction errors).
+     * @return array Residual values for each observation
+     */
     public function getResiduals(): array
     {
         return $this->residuals;
     }
     
+    /**
+     * Returns the fitted (predicted) values.
+     * @return array Predicted y values for each observation
+     */
     public function getFittedValues(): array
     {
         return $this->fittedValues;
     }
     
+    /**
+     * Returns the coefficient of determination.
+     * @return float R-squared value (0 to 1)
+     */
     public function getRSquared(): float
     {
         return $this->rSquared;
     }
     
+    /**
+     * Returns the adjusted R-squared.
+     * @return float Adjusted R-squared value
+     */
     public function getAdjustedRSquared(): float
     {
         return $this->adjustedRSquared;
     }
     
+    /**
+     * Returns standard errors of coefficient estimates.
+     * @return array Standard error for each coefficient
+     */
     public function getStandardErrors(): array
     {
         return $this->standardErrors;
     }
     
+    /**
+     * Returns t-statistics for coefficient significance.
+     * @return array T-statistic for each coefficient
+     */
     public function getTStatistics(): array
     {
         return $this->tStatistics;
     }
     
+    /**
+     * Returns p-values for coefficient significance tests.
+     * @return array P-value for each coefficient
+     */
     public function getPValues(): array
     {
         return $this->pValues;
     }
     
+    /**
+     * Makes predictions for new observations.
+     * 
+     * @param array $X New predictor values (single observation or multiple)
+     * @return array Predicted y values
+     * @throws InvalidArgumentException if input dimensions don't match training data
+     */
     public function predict(array $X): array
     {
         if (!is_array($X[0])) {
@@ -265,6 +403,14 @@ class OLS
         return count($predictions) === 1 ? [$predictions[0]] : $predictions;
     }
     
+    /**
+     * Returns a comprehensive summary of regression results.
+     * 
+     * Includes model fit statistics and coefficient estimates with
+     * their standard errors, t-statistics, and p-values.
+     * 
+     * @return array Associative array with full regression summary
+     */
     public function getSummary(): array
     {
         $summary = [
@@ -290,6 +436,14 @@ class OLS
         return $summary;
     }
     
+    /**
+     * Generates labels for coefficients.
+     * 
+     * Returns 'intercept' for the first coefficient if model has intercept,
+     * otherwise labels are 'x1', 'x2', etc.
+     * 
+     * @return array Coefficient labels
+     */
     private function getCoefficientLabels(): array
     {
         $labels = [];
@@ -308,6 +462,14 @@ class OLS
         return $labels;
     }
     
+    /**
+     * Performs F-test for overall model significance.
+     * 
+     * Tests the null hypothesis that all slope coefficients are zero
+     * (model has no explanatory power).
+     * 
+     * @return array F-statistic, p-value, and degrees of freedom
+     */
     public function fTest(): array
     {
         $yMean = array_sum($this->y) / $this->n;

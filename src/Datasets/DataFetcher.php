@@ -274,17 +274,17 @@ class DataFetcher
     private function parseYahooCSV(string $csvContent): array
     {
         $lines = explode("\n", $csvContent);
-        $headers = str_getcsv(array_shift($lines));
-        
+        $headers = str_getcsv(array_shift($lines), escape: '\\');
+
         $data = [];
         
         foreach ($lines as $line) {
             if (empty(trim($line))) {
                 continue;
             }
-            
-            $row = str_getcsv($line);
-            
+
+            $row = str_getcsv($line, escape: '\\');
+
             if (count($row) !== count($headers)) {
                 continue;
             }

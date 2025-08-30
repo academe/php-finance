@@ -52,8 +52,8 @@ test('throws exception when FRED API key not provided', function () {
 
 test('can clear cache', function () {
     // Test that clearCache method doesn't throw errors
-    expect(fn() => $this->fetcher->clearCache())->not->toThrow();
-    expect(fn() => $this->fetcherNoCache->clearCache())->not->toThrow();
+    expect(fn() => $this->fetcher->clearCache())->not->toThrow(\Throwable::class);
+    expect(fn() => $this->fetcherNoCache->clearCache())->not->toThrow(\Throwable::class);
 });
 
 test('parses Yahoo Finance CSV format', function () {

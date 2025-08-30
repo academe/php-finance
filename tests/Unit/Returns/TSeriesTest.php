@@ -102,7 +102,15 @@ test('calculates excess returns with scalar benchmark', function () {
     $ts = new TSeries([0.05, 0.03, 0.07]);
     $excess = $ts->excessRet(0.02);
     
-    expect($excess->getData())->toBe([0.03, 0.01, 0.05]);
+    $rounded = array_map(fn($x) => round($x, 10, PHP_ROUND_HALF_UP), $excess->getData());
+    expect($rounded)->toBe([0.03, 0.01, 0.05]);
+
+    // Use values that are less prone to floating-point errors
+    $ts = new TSeries([0.1, 0.05, 0.15]);
+    $excess = $ts->excessRet(0.05);
+   
+    $rounded = array_map(fn($x) => round($x, 10, PHP_ROUND_HALF_UP), $excess->getData());
+    expect($rounded)->toBe([0.05, 0.0, 0.1]);
 });
 
 test('calculates excess returns with TSeries benchmark', function () {
@@ -110,7 +118,8 @@ test('calculates excess returns with TSeries benchmark', function () {
     $benchmark = new TSeries([0.02, 0.01, 0.03]);
     $excess = $ts->excessRet($benchmark);
     
-    expect($excess->getData())->toBe([0.03, 0.02, 0.04]);
+    $rounded = array_map(fn($x) => round($x, 10, PHP_ROUND_HALF_UP), $excess->getData());
+    expect($rounded)->toBe([0.03, 0.02, 0.04]);
 });
 
 test('calculates Sharpe ratio', function () {

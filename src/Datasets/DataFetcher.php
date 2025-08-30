@@ -12,10 +12,37 @@ use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Cache\InvalidArgumentException as CacheInvalidArgumentException;
 
+/**
+ * Financial data fetcher for academic and market data sources.
+ * 
+ * This class provides a unified interface for fetching financial data from
+ * various sources commonly used in quantitative finance research and analysis:
+ * 
+ * - Fama-French research data (factor models, portfolio returns)
+ * - FRED (Federal Reserve Economic Data)
+ * - Yahoo Finance (stock prices and historical data)
+ * - Robert Shiller's market data (CAPE ratio, long-term market data)
+ * 
+ * Features:
+ * - PSR-18 HTTP client compatibility for flexible HTTP implementations
+ * - PSR-6 cache support for reducing API calls and improving performance
+ * - Automatic data parsing and normalization
+ * - Error handling and retry logic
+ * 
+ * All methods return parsed, structured data ready for analysis.
+ */
 class DataFetcher
 {
     private array $defaultHeaders;
     
+    /**
+     * Constructs a DataFetcher instance.
+     * 
+     * @param ClientInterface $httpClient PSR-18 compatible HTTP client
+     * @param RequestFactoryInterface $requestFactory PSR-17 request factory
+     * @param CacheItemPoolInterface|null $cache Optional PSR-6 cache pool for caching responses
+     * @param array $defaultHeaders Default HTTP headers to include in requests
+     */
     public function __construct(
         private ClientInterface $httpClient,
         private RequestFactoryInterface $requestFactory,
@@ -27,6 +54,24 @@ class DataFetcher
         ], $defaultHeaders);
     }
     
+    /**
+     * Fetches Fama-French research data.
+     * 
+     * Retrieves factor data and portfolio returns from Kenneth French's
+     * data library. These datasets are essential for asset pricing models,
+     * risk analysis, and academic research.
+     * 
+     * Available datasets include:
+     * - 3-factor model (Market, SMB, HML)
+     * - 5-factor model (Market, SMB, HML, RMW, CMA)
+     * - Momentum factor
+     * - Portfolio returns sorted by size and value
+     * 
+     * @param string $dataset Dataset identifier (e.g., 'F-F_Research_Data_Factors')
+     * @return array Parsed data with date and factor values
+     * @throws InvalidArgumentException if dataset name is invalid
+     * @throws RuntimeException if download or parsing fails
+     */
     public function getFamaFrench(string $dataset = 'F-F_Research_Data_Factors'): array
     {
         $validDatasets = [
@@ -67,6 +112,24 @@ class DataFetcher
         return $data;
     }
     
+    /**
+     * Fetches economic data from FRED (Federal Reserve Economic Data).
+     * 
+     * Provides access to thousands of economic time series including:
+     * - Interest rates (DGS10, FEDFUNDS, etc.)
+     * - Economic indicators (GDP, CPI, unemployment)
+     * - Market indices (DEXUSEU, DJIA)
+     * - Commodity prices
+     * 
+     * Requires FRED API key (free from https://fred.stlouisfed.org/docs/api/)
+     * 
+     * @param string $series FRED series ID (e.g., 'DGS10' for 10-year Treasury)
+     * @param string|null $startDate Start date in YYYY-MM-DD format
+     * @param string|null $endDate End date in YYYY-MM-DD format
+     * @param string|null $apiKey FRED API key (uses FRED_API_KEY env var if not provided)
+     * @return array Array of date-value pairs
+     * @throws RuntimeException if API key missing or request fails
+     */
     public function getFRED(string $series, ?string $startDate = null, ?string $endDate = null, ?string $apiKey = null): array
     {
         if ($apiKey === null) {
@@ -131,6 +194,25 @@ class DataFetcher
         }
     }
     
+    /**
+     * Fetches Robert Shiller's long-term market data.
+     * 
+     * Retrieves historical market data compiled by Nobel laureate Robert Shiller,
+     * including:
+     * - S&P 500 index and earnings
+     * - Cyclically Adjusted PE Ratio (CAPE/Shiller PE)
+     * - Long-term interest rates
+     * - Historical dividends
+     * 
+     * Data spans from 1871 to present, useful for long-term market analysis
+     * and valuation studies.
+     * 
+     * Note: Excel parsing requires additional PHP extensions. Consider using
+     * CSV alternatives if Excel support is not available.
+     * 
+     * @return array Parsed historical market data or error message
+     * @throws RuntimeException if download fails
+     */
     public function getShillerData(): array
     {
         $url = 'http://www.econ.yale.edu/~shiller/data/ie_data.xls';
@@ -152,6 +234,23 @@ class DataFetcher
         return $data;
     }
     
+    /**
+     * Fetches historical price data from Yahoo Finance.
+     * 
+     * Retrieves daily OHLCV (Open, High, Low, Close, Volume) data
+     * and adjusted close prices for stocks, ETFs, and indices.
+     * 
+     * Common symbols:
+     * - Stocks: AAPL, MSFT, GOOGL
+     * - Indices: ^GSPC (S&P 500), ^DJI (Dow Jones), ^IXIC (NASDAQ)
+     * - ETFs: SPY, QQQ, IWM
+     * 
+     * @param string $symbol Yahoo Finance ticker symbol
+     * @param string|null $startDate Start date (defaults to 1 year ago)
+     * @param string|null $endDate End date (defaults to today)
+     * @return array Array of daily price data with OHLCV and adjusted close
+     * @throws RuntimeException if symbol is invalid or request fails
+     */
     public function getYahooFinance(string $symbol, ?string $startDate = null, ?string $endDate = null): array
     {
         $startTimestamp = $startDate ? strtotime($startDate) : strtotime('-1 year');
@@ -189,6 +288,15 @@ class DataFetcher
         }
     }
     
+    /**
+     * Downloads file content from a URL.
+     * 
+     * Handles HTTP requests with proper headers and error handling.
+     * 
+     * @param string $url URL to download from
+     * @return string Downloaded content
+     * @throws RuntimeException if download fails
+     */
     private function downloadFile(string $url): string
     {
         try {
@@ -204,6 +312,16 @@ class DataFetcher
         }
     }
     
+    /**
+     * Extracts content from a ZIP file.
+     * 
+     * Used primarily for Fama-French data which is distributed as ZIP files.
+     * Extracts the first file from the archive.
+     * 
+     * @param string $zipContent Binary ZIP content
+     * @return string Extracted file content
+     * @throws RuntimeException if extraction fails
+     */
     private function extractZipContent(string $zipContent): string
     {
         $tempFile = tempnam(sys_get_temp_dir(), 'phpfinance_zip');
@@ -228,6 +346,18 @@ class DataFetcher
         return $content;
     }
     
+    /**
+     * Parses Fama-French CSV format.
+     * 
+     * Handles the specific format of Fama-French data files which include:
+     * - Header information and descriptions
+     * - Monthly/daily data sections
+     * - Multiple data columns (factors)
+     * - Footer information
+     * 
+     * @param string $csvContent Raw CSV content
+     * @return array Structured data with dates and values
+     */
     private function parseFamaFrenchCSV(string $csvContent): array
     {
         $lines = explode("\n", $csvContent);
@@ -271,6 +401,15 @@ class DataFetcher
         return $data;
     }
     
+    /**
+     * Parses Yahoo Finance CSV format.
+     * 
+     * Processes standard Yahoo Finance historical data CSV with columns:
+     * Date, Open, High, Low, Close, Adj Close, Volume
+     * 
+     * @param string $csvContent Raw CSV content
+     * @return array Array of daily price records
+     */
     private function parseYahooCSV(string $csvContent): array
     {
         $lines = explode("\n", $csvContent);
@@ -308,6 +447,15 @@ class DataFetcher
         return $data;
     }
     
+    /**
+     * Parses Shiller's Excel data file.
+     * 
+     * Currently returns an error message as Excel parsing requires
+     * additional PHP extensions (PHPSpreadsheet or similar).
+     * 
+     * @param string $content Excel file content
+     * @return array Error message or parsed data when implemented
+     */
     private function parseShillerExcel(string $content): array
     {
         return [
@@ -315,6 +463,14 @@ class DataFetcher
         ];
     }
     
+    /**
+     * Retrieves data from cache.
+     * 
+     * Checks if cached data exists and is still valid.
+     * 
+     * @param string $key Cache key
+     * @return array|null Cached data or null if not found/expired
+     */
     private function getFromCache(string $key): ?array
     {
         if (!$this->cache) {
@@ -334,6 +490,16 @@ class DataFetcher
         }
     }
     
+    /**
+     * Saves data to cache.
+     * 
+     * Stores fetched data in cache with specified time-to-live.
+     * Silently fails if caching is unavailable or errors occur.
+     * 
+     * @param string $key Cache key
+     * @param array $data Data to cache
+     * @param int $ttl Time to live in seconds (default 24 hours)
+     */
     private function saveToCache(string $key, array $data, int $ttl = 86400): void
     {
         if (!$this->cache) {
@@ -351,6 +517,12 @@ class DataFetcher
         }
     }
     
+    /**
+     * Clears all cached data.
+     * 
+     * Useful for forcing fresh data fetches or managing cache size.
+     * Only clears cache if a cache pool is configured.
+     */
     public function clearCache(): void
     {
         if ($this->cache) {

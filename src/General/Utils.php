@@ -7,8 +7,36 @@ namespace Academe\PhpFinance\General;
 use InvalidArgumentException;
 use MathPHP\Probability\Distribution\Continuous\Normal;
 
+/**
+ * Financial utilities for portfolio analysis and risk management.
+ * 
+ * This class provides a collection of static methods for common financial
+ * calculations including:
+ * - Portfolio performance metrics (active share, compound returns)
+ * - Risk measures (VaR, CVaR, maximum drawdown)
+ * - Statistical analysis (correlation, distribution generation)
+ * - Position sizing (Kelly formula)
+ * - Performance ratios (Calmar ratio, annualized metrics)
+ * 
+ * All methods are static and can be used independently without instantiation.
+ * Methods handle edge cases and validate inputs to ensure reliable calculations.
+ */
 class Utils
 {
+    /**
+     * Calculates active share between portfolio and benchmark.
+     * 
+     * Active share measures the percentage of portfolio holdings that differ
+     * from the benchmark. It ranges from 0% (identical to benchmark) to 100%
+     * (completely different). Values above 60% typically indicate active management.
+     * 
+     * Formula: Active Share = 0.5 * Σ|w_p,i - w_b,i|
+     * 
+     * @param array $portfolio Associative array of asset => weight for portfolio
+     * @param array $benchmark Associative array of asset => weight for benchmark
+     * @return float Active share (0 to 1, where 1 = 100% active)
+     * @throws InvalidArgumentException if arrays are empty or weights don't sum to 1
+     */
     public static function activeShare(array $portfolio, array $benchmark): float
     {
         if (empty($portfolio) || empty($benchmark)) {
@@ -34,6 +62,21 @@ class Utils
         return $activeShare / 2.0;
     }
     
+    /**
+     * Generates a distribution of returns with specified statistical properties.
+     * 
+     * Creates synthetic return data matching target mean, standard deviation,
+     * skewness, and kurtosis. Useful for Monte Carlo simulations, stress testing,
+     * and scenario analysis.
+     * 
+     * @param float $mean Target mean return
+     * @param float $std Target standard deviation (volatility)
+     * @param float $skew Target skewness (0 = symmetric, >0 = right tail, <0 = left tail)
+     * @param float $kurt Target kurtosis (3 = normal, >3 = fat tails)
+     * @param int $n Number of samples to generate
+     * @return array Array of simulated returns
+     * @throws InvalidArgumentException if std <= 0 or n <= 0
+     */
     public static function returnsDistribution(
         float $mean,
         float $std,
@@ -63,6 +106,20 @@ class Utils
         return $samples;
     }
     
+    /**
+     * Adjusts a sample distribution to match target skewness and kurtosis.
+     * 
+     * Uses Cornish-Fisher expansion to transform normal samples into
+     * a distribution with desired higher moments. This approximation
+     * works well for moderate skewness and excess kurtosis.
+     * 
+     * @param array $samples Original samples
+     * @param float $targetMean Desired mean
+     * @param float $targetStd Desired standard deviation
+     * @param float $targetSkew Desired skewness
+     * @param float $targetKurt Desired kurtosis
+     * @return array Adjusted samples
+     */
     private static function adjustSkewKurtosis(
         array $samples,
         float $targetMean,
@@ -91,6 +148,14 @@ class Utils
         return $result;
     }
     
+    /**
+     * Standardizes data to zero mean and unit variance.
+     * 
+     * Z-score normalization: z = (x - μ) / σ
+     * 
+     * @param array $data Raw data values
+     * @return array Standardized values with mean=0, std=1
+     */
     private static function standardize(array $data): array
     {
         $mean = array_sum($data) / count($data);
@@ -114,6 +179,22 @@ class Utils
         return $standardized;
     }
     
+    /**
+     * Calculates optimal bet size using the Kelly Criterion.
+     * 
+     * The Kelly formula determines the optimal fraction of capital to bet
+     * to maximize long-term growth rate. It balances risk and return optimally
+     * under the assumption of known probabilities and payoffs.
+     * 
+     * Formula: f* = (pb - q) / b
+     * where p = win probability, q = loss probability, b = win/loss ratio
+     * 
+     * @param float $winProbability Probability of winning (0 to 1)
+     * @param float $winAmount Amount won on successful bet
+     * @param float $lossAmount Amount lost on unsuccessful bet
+     * @return float Optimal fraction of capital to bet (can be negative if edge is negative)
+     * @throws InvalidArgumentException if probability not in [0,1] or amounts not positive
+     */
     public static function kellyFormula(
         float $winProbability,
         float $winAmount,
@@ -138,6 +219,16 @@ class Utils
         return ($p * $b - $q) / $b;
     }
     
+    /**
+     * Calculates the total compound return from a series of returns.
+     * 
+     * Compounds individual period returns to get total return.
+     * Formula: (1 + r1) * (1 + r2) * ... * (1 + rn) - 1
+     * 
+     * @param array $returns Array of period returns (e.g., 0.05 for 5%)
+     * @return float Total compound return
+     * @throws InvalidArgumentException if returns array is empty
+     */
     public static function compoundReturn(array $returns): float
     {
         if (empty($returns)) {
@@ -152,6 +243,20 @@ class Utils
         return $product - 1.0;
     }
     
+    /**
+     * Calculates the geometric mean return.
+     * 
+     * The geometric mean properly accounts for compounding and is the
+     * appropriate measure for investment returns over multiple periods.
+     * It represents the constant rate of return that would yield the
+     * same final value.
+     * 
+     * Formula: [(1 + r1) * (1 + r2) * ... * (1 + rn)]^(1/n) - 1
+     * 
+     * @param array $returns Array of period returns
+     * @return float Geometric mean return
+     * @throws InvalidArgumentException if returns empty or any return <= -100%
+     */
     public static function geometricMean(array $returns): float
     {
         if (empty($returns)) {
@@ -169,6 +274,18 @@ class Utils
         return pow($product, 1.0 / count($returns)) - 1.0;
     }
     
+    /**
+     * Calculates Value at Risk (VaR) using historical simulation.
+     * 
+     * VaR estimates the maximum loss that won't be exceeded with a given
+     * confidence level over a specific time period. For example, 95% VaR
+     * of -5% means there's only a 5% chance of losing more than 5%.
+     * 
+     * @param array $returns Historical returns
+     * @param float $confidence Confidence level (e.g., 0.95 for 95%)
+     * @return float VaR threshold (typically negative for losses)
+     * @throws InvalidArgumentException if returns empty or confidence not in (0,1)
+     */
     public static function valueAtRisk(array $returns, float $confidence = 0.95): float
     {
         if (empty($returns)) {
@@ -189,6 +306,18 @@ class Utils
         return $returns[$index];
     }
     
+    /**
+     * Calculates Conditional Value at Risk (CVaR/Expected Shortfall).
+     * 
+     * CVaR measures the expected loss given that the loss exceeds the VaR
+     * threshold. It provides information about tail risk and is a coherent
+     * risk measure (unlike VaR).
+     * 
+     * @param array $returns Historical returns
+     * @param float $confidence Confidence level (e.g., 0.95 for 95%)
+     * @return float Expected loss in the tail (typically negative)
+     * @throws InvalidArgumentException if returns empty or confidence not in (0,1)
+     */
     public static function conditionalValueAtRisk(array $returns, float $confidence = 0.95): float
     {
         if (empty($returns)) {
@@ -210,6 +339,17 @@ class Utils
         return array_sum($tailReturns) / count($tailReturns);
     }
     
+    /**
+     * Calculates maximum drawdown from a price series.
+     * 
+     * Maximum drawdown measures the largest peak-to-trough decline
+     * in value. It's a key risk metric showing the worst historical
+     * loss an investor would have experienced.
+     * 
+     * @param array $prices Array of prices or portfolio values
+     * @return float Maximum drawdown (negative percentage, e.g., -0.2 for 20% drawdown)
+     * @throws InvalidArgumentException if prices array is empty
+     */
     public static function maxDrawdown(array $prices): float
     {
         if (empty($prices)) {
@@ -234,6 +374,20 @@ class Utils
         return $maxDrawdown;
     }
     
+    /**
+     * Calculates the Calmar ratio.
+     * 
+     * The Calmar ratio measures risk-adjusted returns by dividing
+     * annualized return by maximum drawdown. Higher values indicate
+     * better risk-adjusted performance. Typically calculated over 3 years.
+     * 
+     * Formula: Annualized Return / |Maximum Drawdown|
+     * 
+     * @param array $returns Period returns
+     * @param int $periods Periods per year (252 for daily, 12 for monthly)
+     * @return float Calmar ratio
+     * @throws InvalidArgumentException if returns array is empty
+     */
     public static function calmarRatio(array $returns, int $periods = 252): float
     {
         if (empty($returns)) {
@@ -258,6 +412,17 @@ class Utils
         return $annualReturn / $maxDD;
     }
     
+    /**
+     * Calculates annualized return from period returns.
+     * 
+     * Converts returns of any frequency to annual equivalent,
+     * properly accounting for compounding.
+     * 
+     * @param array $returns Period returns
+     * @param int $periods Number of periods per year (252 for daily, 52 for weekly, 12 for monthly)
+     * @return float Annualized return
+     * @throws InvalidArgumentException if returns array is empty
+     */
     public static function annualizedReturn(array $returns, int $periods = 252): float
     {
         if (empty($returns)) {
@@ -274,6 +439,19 @@ class Utils
         return pow(1 + $totalReturn, 1 / $years) - 1;
     }
     
+    /**
+     * Calculates annualized volatility from period returns.
+     * 
+     * Scales period volatility to annual equivalent using square root of time.
+     * Assumes returns are independently distributed (no autocorrelation).
+     * 
+     * Formula: σ_annual = σ_period * √periods
+     * 
+     * @param array $returns Period returns
+     * @param int $periods Number of periods per year
+     * @return float Annualized volatility (standard deviation)
+     * @throws InvalidArgumentException if returns array is empty
+     */
     public static function annualizedVolatility(array $returns, int $periods = 252): float
     {
         if (empty($returns)) {
@@ -292,6 +470,20 @@ class Utils
         return $std * sqrt($periods);
     }
     
+    /**
+     * Calculates Pearson correlation coefficient between two series.
+     * 
+     * Measures linear relationship between two variables.
+     * Range: -1 (perfect negative) to +1 (perfect positive),
+     * with 0 indicating no linear relationship.
+     * 
+     * Formula: ρ = Cov(X,Y) / (σ_X * σ_Y)
+     * 
+     * @param array $x First data series
+     * @param array $y Second data series
+     * @return float Correlation coefficient (-1 to 1)
+     * @throws InvalidArgumentException if arrays empty or different lengths
+     */
     public static function correlation(array $x, array $y): float
     {
         if (empty($x) || empty($y)) {

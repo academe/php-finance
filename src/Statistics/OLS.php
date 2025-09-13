@@ -8,7 +8,7 @@ use InvalidArgumentException;
 use MathPHP\LinearAlgebra\Matrix;
 use MathPHP\LinearAlgebra\MatrixFactory;
 use MathPHP\Probability\Distribution\Continuous\StudentT;
-use MathPHP\Statistics\Distribution\Continuous\F;
+use MathPHP\Probability\Distribution\Continuous\F;
 
 /**
  * Ordinary Least Squares (OLS) regression implementation.

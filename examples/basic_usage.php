@@ -133,12 +133,13 @@ echo "\n7. Data Fetching Example\n";
 echo "-----------------------\n";
 
 try {
-    // Create HTTP client and cache
+    // Create HTTP client, factories, and cache
     $httpClient = new Client(['timeout' => 10]);
     $requestFactory = new HttpFactory();
+    $uriFactory = new HttpFactory(); // HttpFactory implements both RequestFactoryInterface and UriFactoryInterface
     $cache = new ArrayAdapter();
     
-    $fetcher = new DataFetcher($httpClient, $requestFactory, $cache);
+    $fetcher = new DataFetcher($httpClient, $requestFactory, $uriFactory, $cache);
     
     echo "DataFetcher created successfully with PSR-18 client and PSR-6 cache\n";
     echo "Note: Actual data fetching requires internet connection and API keys\n";

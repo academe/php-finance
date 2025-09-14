@@ -9,8 +9,11 @@ use RuntimeException;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\UriFactoryInterface;
+use Psr\Http\Message\UriInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Cache\InvalidArgumentException as CacheInvalidArgumentException;
+use Adbar\Dot;
 
 /**
  * Financial data fetcher for academic and market data sources.
@@ -40,12 +43,14 @@ class DataFetcher
      * 
      * @param ClientInterface $httpClient PSR-18 compatible HTTP client
      * @param RequestFactoryInterface $requestFactory PSR-17 request factory
+     * @param UriFactoryInterface $uriFactory PSR-17 URI factory
      * @param CacheItemPoolInterface|null $cache Optional PSR-6 cache pool for caching responses
      * @param array $defaultHeaders Default HTTP headers to include in requests
      */
     public function __construct(
         private ClientInterface $httpClient,
         private RequestFactoryInterface $requestFactory,
+        private UriFactoryInterface $uriFactory,
         private ?CacheItemPoolInterface $cache = null,
         array $defaultHeaders = []
     ) {
@@ -90,10 +95,10 @@ class DataFetcher
             throw new InvalidArgumentException('Invalid Fama-French dataset name');
         }
         
-        $url = sprintf(
-            'http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/%s_CSV.zip',
-            $dataset
-        );
+        $uri = $this->uriFactory->createUri('http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/')
+            ->withPath('/pages/faculty/ken.french/ftp/' . $dataset . '_CSV.zip');
+        
+        $url = (string) $uri;
         
         $cacheKey = 'famafrench_' . md5($dataset);
         
@@ -153,7 +158,10 @@ class DataFetcher
             $params['observation_end'] = $endDate;
         }
         
-        $url = 'https://api.stlouisfed.org/fred/series/observations?' . http_build_query($params);
+        $uri = $this->uriFactory->createUri('https://api.stlouisfed.org/fred/series/observations')
+            ->withQuery(http_build_query($params));
+        
+        $url = (string) $uri;
         
         $cacheKey = 'fred_' . md5($url);
         
@@ -215,7 +223,8 @@ class DataFetcher
      */
     public function getShillerData(): array
     {
-        $url = 'http://www.econ.yale.edu/~shiller/data/ie_data.xls';
+        $uri = $this->uriFactory->createUri('http://www.econ.yale.edu/~shiller/data/ie_data.xls');
+        $url = (string) $uri;
         
         $cacheKey = 'shiller_data';
         
@@ -237,8 +246,11 @@ class DataFetcher
     /**
      * Fetches historical price data from Yahoo Finance.
      * 
+     * NOTE: The v7 download API now requires authentication. This method now uses
+     * the v8 chart API which is still publicly accessible.
+     * 
      * Retrieves daily OHLCV (Open, High, Low, Close, Volume) data
-     * and adjusted close prices for stocks, ETFs, and indices.
+     * for stocks, ETFs, and indices.
      * 
      * Common symbols:
      * - Stocks: AAPL, MSFT, GOOGL
@@ -248,7 +260,7 @@ class DataFetcher
      * @param string $symbol Yahoo Finance ticker symbol
      * @param string|null $startDate Start date (defaults to 1 year ago)
      * @param string|null $endDate End date (defaults to today)
-     * @return array Array of daily price data with OHLCV and adjusted close
+     * @return array Array of daily price data with OHLCV
      * @throws RuntimeException if symbol is invalid or request fails
      */
     public function getYahooFinance(string $symbol, ?string $startDate = null, ?string $endDate = null): array
@@ -256,12 +268,19 @@ class DataFetcher
         $startTimestamp = $startDate ? strtotime($startDate) : strtotime('-1 year');
         $endTimestamp = $endDate ? strtotime($endDate) : time();
         
-        $url = sprintf(
-            'https://query1.finance.yahoo.com/v7/finance/download/%s?period1=%d&period2=%d&interval=1d&events=history',
-            urlencode($symbol),
-            $startTimestamp,
-            $endTimestamp
-        );
+        // Use v8 API instead of v7 (which now requires authentication)
+        $params = [
+            'period1' => $startTimestamp,
+            'period2' => $endTimestamp,
+            'interval' => '1d',
+            'includePrePost' => 'false',
+            'events' => 'div|split|earn',
+        ];
+        
+        $uri = $this->uriFactory->createUri('https://query1.finance.yahoo.com/v8/finance/chart/' . urlencode($symbol))
+            ->withQuery(http_build_query($params));
+        
+        $url = (string) $uri;
         
         $cacheKey = 'yahoo_' . md5($url);
         
@@ -271,12 +290,15 @@ class DataFetcher
         
         try {
             $request = $this->requestFactory->createRequest('GET', $url);
-            $request = $request->withHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+            $request = $request
+                ->withHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+                ->withHeader('Accept', 'application/json')
+                ->withHeader('Accept-Language', 'en-US,en;q=0.9');
             
             $response = $this->httpClient->sendRequest($request);
             
-            $csvContent = $response->getBody()->getContents();
-            $data = $this->parseYahooCSV($csvContent);
+            $jsonContent = $response->getBody()->getContents();
+            $data = $this->parseYahooV8JSON($jsonContent);
             
             if ($this->cache) {
                 $this->saveToCache($cacheKey, $data, 3600); // 1 hour
@@ -293,11 +315,11 @@ class DataFetcher
      * 
      * Handles HTTP requests with proper headers and error handling.
      * 
-     * @param string $url URL to download from
+     * @param string|UriInterface $url URL to download from
      * @return string Downloaded content
      * @throws RuntimeException if download fails
      */
-    private function downloadFile(string $url): string
+    private function downloadFile(string|UriInterface $url): string
     {
         try {
             $request = $this->requestFactory->createRequest('GET', $url);
@@ -402,6 +424,51 @@ class DataFetcher
     }
     
     /**
+     * Parses Yahoo Finance v8 API JSON response.
+     * 
+     * Processes the JSON response from the v8 chart API and converts
+     * it to the same format as the old CSV API for compatibility.
+     * Uses dot notation for cleaner nested data access.
+     * 
+     * @param string $jsonContent Raw JSON content from v8 API
+     * @return array Array of daily price records
+     * @throws RuntimeException if JSON parsing fails
+     */
+    private function parseYahooV8JSON(string $jsonContent): array
+    {
+        $data = json_decode($jsonContent, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new RuntimeException('Failed to parse JSON response: ' . json_last_error_msg());
+        }
+        
+        $dot = new Dot($data);
+        
+        // Use dot notation for cleaner access
+        $timestamps = $dot->get('chart.result.0.timestamp', []);
+        $quote = $dot->get('chart.result.0.indicators.quote.0', []);
+        
+        if (empty($timestamps) || empty($quote)) {
+            throw new RuntimeException('Missing required data in Yahoo Finance response');
+        }
+        
+        $ohlcv = [];
+        
+        for ($i = 0; $i < count($timestamps); $i++) {
+            $ohlcv[] = [
+                'Date' => date('Y-m-d', $timestamps[$i]),
+                'Open' => $quote['open'][$i] ?? null,
+                'High' => $quote['high'][$i] ?? null,
+                'Low' => $quote['low'][$i] ?? null,
+                'Close' => $quote['close'][$i] ?? null,
+                'Volume' => $quote['volume'][$i] ?? null,
+            ];
+        }
+        
+        return $ohlcv;
+    }
+    
+    /**
      * Parses Yahoo Finance CSV format.
      * 
      * Processes standard Yahoo Finance historical data CSV with columns:
@@ -409,6 +476,7 @@ class DataFetcher
      * 
      * @param string $csvContent Raw CSV content
      * @return array Array of daily price records
+     * @deprecated Use parseYahooV8JSON instead as CSV API requires authentication
      */
     private function parseYahooCSV(string $csvContent): array
     {

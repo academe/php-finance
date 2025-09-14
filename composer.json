@@ -26,7 +26,8 @@
         "psr/http-client": "^1.0",
         "psr/http-factory": "^1.0",
         "psr/cache": "^3.0",
-        "markrogoyski/math-php": "^2.0"
+        "markrogoyski/math-php": "^2.0",
+        "adbario/php-dot-notation": "^3.0"
     },
     "require-dev": {
         "pestphp/pest": "^2.0",

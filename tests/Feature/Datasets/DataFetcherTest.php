@@ -8,10 +8,11 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 beforeEach(function () {
     $httpClient = new Client(['timeout' => 30]);
     $requestFactory = new HttpFactory();
+    $uriFactory = new HttpFactory(); // HttpFactory implements both RequestFactoryInterface and UriFactoryInterface
     $cache = new ArrayAdapter();
     
-    $this->fetcher = new DataFetcher($httpClient, $requestFactory, $cache);
-    $this->fetcherNoCache = new DataFetcher($httpClient, $requestFactory, null);
+    $this->fetcher = new DataFetcher($httpClient, $requestFactory, $uriFactory, $cache);
+    $this->fetcherNoCache = new DataFetcher($httpClient, $requestFactory, $uriFactory, null);
 });
 
 test('can create DataFetcher instance', function () {

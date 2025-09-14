@@ -35,7 +35,22 @@ This is a PHP port of the Python pyfinance library for quantitative finance. The
 - **Statistics\OLS**: Ordinary Least Squares regression with comprehensive statistics.
 - **Statistics\RollingOLS**: Rolling window OLS regression for time-varying analysis.
 - **General\Utils**: Static utility functions for financial calculations (active share, tracking error, etc.).
-- **Datasets\DataFetcher**: Fetches data from external sources (Fama-French, FRED, Yahoo Finance).
+- **Datasets**: Data fetching system using adapter pattern for different financial data sources.
+
+### Data Source Architecture (Adapter Pattern)
+The library uses an adapter pattern for data sources, similar to Laravel database drivers or Flysystem:
+
+- **DataManager**: Main facade for managing multiple data source adapters
+- **Adapters**: Individual adapters for each data source (Yahoo Finance, FRED, Fama-French)
+- **Contracts**: Interfaces defining adapter capabilities (DataSourceAdapterInterface, HistoricalDataInterface, etc.)
+- **AbstractAdapter**: Base class providing common functionality (caching, HTTP requests, etc.)
+
+Key adapters:
+- **YahooFinanceAdapter**: Historical and real-time stock data using v8 API
+- **FamaFrenchAdapter**: Academic factor data and portfolio returns
+- **FredAdapter**: Federal Reserve economic data (requires API key)
+
+Third-party adapters can be created by implementing the adapter interfaces.
 
 ### Key Design Principles
 - **Strict Typing**: All files use `declare(strict_types=1)` and PHP 8.3+ type declarations.

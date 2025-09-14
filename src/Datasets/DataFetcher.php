@@ -446,22 +446,25 @@ class DataFetcher
         
         // Use dot notation for cleaner access
         $timestamps = $dot->get('chart.result.0.timestamp', []);
-        $quote = $dot->get('chart.result.0.indicators.quote.0', []);
+        $quoteData = $dot->get('chart.result.0.indicators.quote.0', []);
         
-        if (empty($timestamps) || empty($quote)) {
+        if (empty($timestamps) || empty($quoteData)) {
             throw new RuntimeException('Missing required data in Yahoo Finance response');
         }
+        
+        // Wrap quote data in Dot object for efficient nested access
+        $quote = new Dot($quoteData);
         
         $ohlcv = [];
         
         for ($i = 0; $i < count($timestamps); $i++) {
             $ohlcv[] = [
                 'Date' => date('Y-m-d', $timestamps[$i]),
-                'Open' => $quote['open'][$i] ?? null,
-                'High' => $quote['high'][$i] ?? null,
-                'Low' => $quote['low'][$i] ?? null,
-                'Close' => $quote['close'][$i] ?? null,
-                'Volume' => $quote['volume'][$i] ?? null,
+                'Open' => $quote->get("open.$i"),
+                'High' => $quote->get("high.$i"),
+                'Low' => $quote->get("low.$i"),
+                'Close' => $quote->get("close.$i"),
+                'Volume' => $quote->get("volume.$i"),
             ];
         }
         
